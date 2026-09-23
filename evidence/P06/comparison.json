@@ -1,0 +1,187 @@
+{
+  "record": "P06 \u2014 measured Held/native handover comparison",
+  "evidence_grade": "REAL LOCAL FORK",
+  "operation": {
+    "description": "Raise the cumulative supply ceiling 50,000 -> 80,000 USDC and replace operator A with operator B, with 30,000 already consumed.",
+    "correct_remaining_after": "50000000000",
+    "units": "USDC base units (6 decimals)"
+  },
+  "native_source": "docs/baseline/native-measurements.json (frozen before that run)",
+  "parity": {
+    "used_supply": 30000000000,
+    "ceiling": 50000000000,
+    "remaining": 20000000000,
+    "supplies": 3,
+    "chunk": 10000000000,
+    "_note": "Held performs three REAL 10,000 USDC supplies through its own controller so it starts from the SAME 30,000 consumed / 20,000 remaining the native baseline starts from. Asserted, not assumed."
+  },
+  "isolation": "evm_snapshot before each branch, evm_revert after, so the clean and interrupted cases cannot contaminate each other.",
+  "accounting": "ONE method. Every ceremony is a real Safe execTransaction signed by two of three owners; the change is a real MultiSendCallOnly delegatecall. Nothing is counted as batched that was not batched.",
+  "table": [
+    {
+      "branch": "native clean",
+      "ceremonies": 1,
+      "individual_signatures": 2,
+      "submitted_transactions": 1,
+      "starting_used": 30000000000,
+      "final_remaining": 50000000000
+    },
+    {
+      "branch": "held clean",
+      "ceremonies": 2,
+      "individual_signatures": 4,
+      "submitted_transactions": 2,
+      "starting_used": 30000000000,
+      "final_remaining": 50000000000
+    },
+    {
+      "branch": "native interrupted",
+      "ceremonies": 2,
+      "individual_signatures": 4,
+      "submitted_transactions": 2,
+      "starting_used": 30000000000,
+      "final_remaining": 45000000000
+    },
+    {
+      "branch": "held interrupted",
+      "ceremonies": 2,
+      "individual_signatures": 4,
+      "submitted_transactions": 2,
+      "starting_used": 30000000000,
+      "final_remaining": 50000000000
+    }
+  ],
+  "held": {
+    "clean": {
+      "branch": "clean",
+      "counts": {
+        "ceremonies": 2,
+        "individual_signatures": 4,
+        "submitted_transactions": 2,
+        "chain_reads": 5,
+        "stores_consulted": [
+          "ERC20 approval state",
+          "Held controller consumed[operationId]",
+          "Held controller state",
+          "Morpho authorization state",
+          "Safe state",
+          "Zodiac Roles state"
+        ],
+        "stores_for_resolution": [
+          "Held controller consumed[operationId]"
+        ],
+        "stores_for_resolution_count": 1,
+        "recovery_steps": 0,
+        "refusals_raised": []
+      },
+      "starting_used": 30000000000,
+      "final_used": 30000000000,
+      "final_ceiling": 80000000000,
+      "final_remaining": 50000000000,
+      "final_roles_remaining": 50000000000,
+      "final_runner": "0x976EA74026E726554dB657fA54763abd0C3a0aa9",
+      "final_epoch": 2,
+      "batch_was_real_multisend": true
+    },
+    "interrupted": {
+      "branch": "interrupted",
+      "counts": {
+        "ceremonies": 2,
+        "individual_signatures": 4,
+        "submitted_transactions": 2,
+        "chain_reads": 5,
+        "stores_consulted": [
+          "ERC20 approval state",
+          "Held controller consumed[operationId]",
+          "Held controller state",
+          "Morpho authorization state",
+          "Safe state",
+          "Zodiac Roles state"
+        ],
+        "stores_for_resolution": [
+          "Held controller consumed[operationId]"
+        ],
+        "stores_for_resolution_count": 1,
+        "recovery_steps": 2,
+        "refusals_raised": [
+          "refused while unresolved: ['UNRESOLVED:0x37ac8a6892009552c1cbc5baabeb6a907ec0fd8f5147c66efaa7401c82776ce2']"
+        ]
+      },
+      "starting_used": 30000000000,
+      "final_used": 30000000000,
+      "final_ceiling": 80000000000,
+      "final_remaining": 50000000000,
+      "final_roles_remaining": 50000000000,
+      "final_runner": "0x976EA74026E726554dB657fA54763abd0C3a0aa9",
+      "final_epoch": 2,
+      "batch_was_real_multisend": true
+    }
+  },
+  "findings": [
+    {
+      "dimension": "owner work, clean change",
+      "result": "NATIVE IS CHEAPER",
+      "detail": "native 1/2/1 against Held 2/4/2. Held cannot batch fence with activate: the controller refuses to activate while active, and the fence must be CONFIRMED before a candidate is pinned. A product constraint, not an accounting artifact.",
+      "held_claims_advantage": false
+    },
+    {
+      "dimension": "owner work, interrupted change",
+      "result": "TIE",
+      "detail": "native 2/4/2 against Held 2/4/2. The competent native procedure reaches the correct result on the first attempt and costs the same.",
+      "held_claims_advantage": false
+    },
+    {
+      "dimension": "stores consulted to resolve an in-flight operation",
+      "result": "HELD IS NARROWER",
+      "detail": "Held answers 'did THAT operation execute?' from 1 store: consumed[operationId] at a stated block, bound to the native decision by the journal. Native derives the BUDGET correctly in aggregate from the allowance but does not identify which operation ran.",
+      "held_claims_advantage": true,
+      "caveat": "Native reaches the correct remaining capacity without this."
+    },
+    {
+      "dimension": "behaviour when the outcome is unknown",
+      "result": "HELD REFUSES; NATIVE HAS NOTHING TO REFUSE WITH",
+      "detail": "the interrupted branch raised 1 refusal(s) naming the unresolved operation and would not advance. Native has no per-operation record, so there is no state in which it can decline.",
+      "held_claims_advantage": true,
+      "caveat": "A property of the SYSTEM, not the operator. A careful native operator following the V4 order reaches the same outcome."
+    },
+    {
+      "dimension": "activation-time consistency guard",
+      "result": "HELD ENFORCES SOMETHING NATIVE DOES NOT",
+      "detail": "The controller refuses an activation whose ceiling the Zodiac allowance would not honour (AllowanceDesynchronised), which is why the change batch must carry setAllowance and activate together.",
+      "held_claims_advantage": true,
+      "caveat": "Makes one specific operator error impossible rather than unlikely."
+    },
+    {
+      "dimension": "setup and trust cost",
+      "result": "HELD COSTS MORE",
+      "detail": "A controller deployed and installed, sole membership of two Zodiac roles, five budgets configured, and a durable journal.",
+      "held_claims_advantage": false
+    }
+  ],
+  "conclusion": {
+    "headline": "Held does not reduce owner work. It costs more on the clean change and ties competent native tooling on the interrupted one.",
+    "held_adds": [
+      "per-operation resolution from one store",
+      "a refusal the system enforces while an outcome is unknown",
+      "an activation-time consistency guard"
+    ],
+    "held_costs": [
+      "more owner work on a clean change",
+      "controller, two role memberships, five budgets, a journal",
+      "a further component to trust and maintain"
+    ],
+    "what_is_NOT_claimed": "That Held is cheaper or faster, or that native tooling cannot do this. The measurements say otherwise."
+  },
+  "interruption_semantics": {
+    "_warning": "The two interrupted branches do NOT share an interruption, and their final remaining figures must not be compared as if they did.",
+    "native_I2": "an in-flight supply that DID land (5,000 more consumed), so the competent procedure derives 35,000 used and 45,000 remaining.",
+    "held": "a submission whose transport never returned and which did NOT reach the chain, so consumption stays at 30,000 and 50,000 remains.",
+    "what_this_does_and_does_not_show": "Both branches reach the CORRECT remaining capacity for the interruption they actually suffered. Neither preserved more than the other; they faced different events."
+  },
+  "limits": [
+    "Local Base-mainnet fork only. No public transaction, deployment or spending.",
+    "Operator-work counts are counts of discrete contract-level actions, as the native baseline states of its own numbers. Not a human-factors study.",
+    "The native half was measured before Held existed; the halves were not run simultaneously. The operation, counters and starting state are the same.",
+    "Almanak reconfiguration and the authenticated KeeperHub boundary are exercised on neither side. L10 is open."
+  ]
+}
